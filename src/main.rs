@@ -1,15 +1,8 @@
-use tokio::main;
+mod utils;
+
 use glium::*;
 
-#[derive(Copy, Clone)]
-struct Vertex {
-    position: [f32; 2],
-    color: [f32; 3],
-}
-
-implement_vertex!(Vertex, position, color);
-
-const vertex_shader_src: &str = r#"
+const VERTEX_SHADER_SRC: &str = r#"
     #version 140
 
     in vec2 position;
@@ -22,8 +15,9 @@ const vertex_shader_src: &str = r#"
     }
 "#;
 
-const fragment_shader_src: &str = r#"
+const FRAGMENT_SHADER_SRC: &str = r#"
     #version 140
+    uniform Texture tex;
 
     in vec3 vColor;
     out vec4 color;
@@ -34,42 +28,29 @@ const fragment_shader_src: &str = r#"
 "#;
 
 
-#[main(
+#[tokio::main(
     flavor = "multi_thread",
     worker_threads = 8,
 )]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>>{
     let event_loop = winit::event_loop::EventLoopBuilder::new()
         .build();
 
-    let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
+    let (_window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
         .with_title("Crytid Squad")
         .build(&event_loop);
 
-    let vertex1 = Vertex {
-        position: [0.0, 0.0],
-        color: [1.0, 0.0, 0.0],
-    };
-    let vertex2 = Vertex {
-        position: [0.0,  0.5],
-        color: [0.0, 1.0, 0.0],
-    };
-    let vertex3 = Vertex {
-        position: [0.5, -0.25],
-        color: [0.0, 0.0, 1.0],
-    };
+    let model = utils::obj::parse_object(
+        "assets/models/teapot.obj",
+        &display,
+    ).await?;
 
-    let shape = vec![vertex1, vertex2, vertex3];
-    
-    let vertex_buffer = glium::VertexBuffer::new(&display, &shape).unwrap();
-    let indices = glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList);
-
-    let program = glium::Program::from_source(&display, vertex_shader_src, fragment_shader_src, None).unwrap();
+    let program = glium::Program::from_source(&display, VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC, None).unwrap();
 
     loop {
         let mut frame = display.draw();
         frame.clear_color(0.0, 0.0, 1.0, 1.0);
-        frame.draw(&vertex_buffer, &indices, &program, 
+        frame.draw(&model.vertices, &model.indices, &program, 
             &glium::uniforms::EmptyUniforms, &Default::default()
         ).expect("Failed to draw");
         frame.finish()
@@ -80,11 +61,25 @@ async fn main() {
             match event {
                 winit::event::Event::WindowEvent { event, .. } => match event {
                     // Close the window if the exit button is pressed
-                    winit::event::WindowEvent::CloseRequested => *control_flow = winit::event_loop::ControlFlow::Exit,
+                    winit::event::WindowEvent::CloseRequested => close(control_flow),
+                    winit::event::WindowEvent::KeyboardInput { input, .. } => {
+                        if let Some(key) = input.virtual_keycode {
+                            match key {
+                                winit::event::VirtualKeyCode::Escape => close(control_flow),
+                                _ => (),
+                            }
+                        }
+                    },
                     _ => (),
                 },
                 _ => (),
             }
         });
     }
+}
+
+fn close(
+    control_flow: &mut winit::event_loop::ControlFlow,
+) {
+    *control_flow = winit::event_loop::ControlFlow::Exit;
 }
