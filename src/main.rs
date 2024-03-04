@@ -1,48 +1,12 @@
 #![feature(async_closure)]
+#[allow(dead_code)]
 mod utils;
+mod core;
+
+use core::*;
 
 use glium::*;
 use glium::uniforms::Sampler;
-
-const VERTEX_SHADER_SRC: &str = r#"
-    #version 140
-    uniform mat4 model;
-    uniform mat4 view;
-    uniform mat4 proj;
-
-    in vec3 position;
-    in vec3 normal;
-    in vec2 uv;
-
-    out vec3 vNormal;
-    out vec2 vUv;
-
-    void main() {
-        vNormal = normal;
-        vUv = uv;
-
-        gl_Position = proj * view * model * vec4(position, 1.0);
-    }
-"#;
-
-const FRAGMENT_SHADER_SRC: &str = r#"
-    #version 140
-    uniform sampler2D texture;
-    uniform vec3 light;
-    uniform float ambient;
-
-    in vec3 vNormal;
-    in vec2 vUv;
-
-    out vec4 color;
-
-    void main() {
-        float intensity = clamp(dot(vNormal, light), 0.0, 1.0 - ambient) + ambient;
-
-        color = texture2D(texture, vUv) * vec4(intensity, intensity, intensity, 1.0);
-    }
-"#;
-
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -54,21 +18,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let mut game_state = core::GameState::new(0.01);
+
     let event_loop = winit::event_loop::EventLoopBuilder::new()
         .build();
+    let renderer = core::RenderResource::new(&event_loop)?;
+    game_state.add_resource(renderer);
 
-    let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
-        .with_title("Crytid Squad")
-        .build(&event_loop);
+    let renderer = game_state.get_resource::<RenderResource>().unwrap();
+    game_state.scheduler.add_system(render_system, SystemType::Update);
 
     let model = utils::obj::parse_object(
         "assets/models/teapot.obj",
-        &display,
+        &renderer.display,
     ).await?;
 
-    let program = glium::Program::from_source(&display, VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC, None)?;
 
-    let dimensions = display.get_max_viewport_dimensions();
+    let dimensions = &renderer.display.get_max_viewport_dimensions();
     let mut camera = utils::camera::Camera::new(
         [0.0, 0.0, -5.0],
         [0.0, 0.0, 0.0],
@@ -77,9 +43,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         0.1,
         100.0,
     );
-
-    let proj = camera.get_proj();
-    let view = camera.get_view();
 
     let mut transform = utils::transform::Transform::new(
         [0.0, 0.0, 0.0],
@@ -97,15 +60,18 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let image = glium::texture::RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dimensions);
 
     let texture = glium::texture::Texture2d::new(
-        &display,
+        &renderer.display,
         image,
     )?;
 
-    let texture: &'static Texture2d = unsafe { || -> &'static _ { &*(&texture as *const _) } }();
+    // gives texture a static lifetime to allow it to be used in the draw loop
+    let texture: &'static Texture2d = unsafe { &*(&texture as *const _) };
 
     let sampler: Sampler<'static, _>  = texture.sampled()
         .magnify_filter(glium::uniforms::MagnifySamplerFilter::Linear)
         .minify_filter(glium::uniforms::MinifySamplerFilter::Linear);
+
+    let mut input_handler = utils::input_handling::InputHandler::new();
 
     let mut frame_counter = 0;
     let mut last_second = std::time::Instant::now();
@@ -118,9 +84,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 // Close the window if the exit button is pressed
                 winit::event::WindowEvent::CloseRequested => close(control_flow),
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
-                    println!("{:?}", input);
-
                     if let Some(key) = input.virtual_keycode {
+                        input_handler.handle_key_press(key, input.state);
                         match key {
                             winit::event::VirtualKeyCode::Escape => close(control_flow),
                             _ => (),
@@ -143,41 +108,19 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 frame_counter += 1;
 
                 if now.duration_since(last_second).as_secs_f32() >= 1.0 {
-                    window.set_title(&format!("Crytid Squad - FPS: {}", frame_counter));
+                    //window.set_title(&format!("Crytid Squad - FPS: {}", frame_counter));
 
                     frame_counter = 0;
                     last_second = now;
                 }
 
-                let mut frame = display.draw();
+                input_handler.periodic();
 
-                //rotate the model
-                transform.rotation[1] = t * 0.5;
-                transform.rotation[0] = t * 0.3;
-
-                frame.clear_color(0.0, 0.0, 0.0, 1.0);
-
-                let uniforms = uniform! {
-                    model: transform.get_model().0,
-                    view: camera.get_view(),
-                    proj: camera.get_proj(),
-
-                    texture: sampler,
-                    light: [0.0, 0.0, 1.0f32],
-                    ambient: 0.3f32,
-                };
-
-                frame.draw(&model.vertices, &model.indices, &program,
-                    &uniforms, &Default::default()
-                ).unwrap();
-                frame.finish().unwrap();
             },
-            winit::event::Event::RedrawEventsCleared => window.request_redraw(),
+            winit::event::Event::RedrawEventsCleared => renderer.window.request_redraw(),
             _ => (),
         }
     });
-
-    Ok(())
 }
 
 fn close(
