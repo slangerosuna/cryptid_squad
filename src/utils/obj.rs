@@ -33,8 +33,7 @@ pub async fn parse_object(
     let mut vertices: Vec<(u32, u32, u32)> = Vec::new(); // (position, normal, uv)
     let mut indices: Vec<u32> = Vec::new();
 
-    let contents = std::fs::read_to_string(path)
-        .expect("Could not read obj file");
+    let contents = std::fs::read_to_string(path)?;
 
     let lines = contents.lines();
 
@@ -50,16 +49,17 @@ pub async fn parse_object(
                 vertex_positions.push([
                     words.next().ok_or(err!())?.parse()?,
                     words.next().ok_or(err!())?.parse()?,
-                    words.next().ok_or(err !())?.parse()?,
+                    words.next().ok_or(err!())?.parse()?,
                 ]);
             },
             Some("f") => {
                 let f: Vec<[u32; 3]> = words.map(|x| //maps each word to a [u32; 3]
-                    x.split("/")
-                    .map(|y| y.parse::<u32>().unwrap() - 1) //subtracts 1 from each index to make it 0-based instead of 1-based
-                    .collect::<Vec<u32>>()
-                    .try_into()
-                    .unwrap()
+                    x
+                        .split("/")
+                        .map(|y| y.parse::<u32>().unwrap() - 1) //subtracts 1 from each index to make it 0-based instead of 1-based
+                        .collect::<Vec<u32>>()
+                        .try_into()
+                        .unwrap()
                 ).collect();
 
                 match f.len() {

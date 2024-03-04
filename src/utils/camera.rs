@@ -8,7 +8,7 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn new(
+    pub const fn new(
         position: [f32; 3],
         rotation: [f32; 3],
         fov: f32,
@@ -57,7 +57,7 @@ impl Camera {
             [x, y, z, 0.0],
             [-y, x, z, 0.0],
             [-z, -z, rotation[0].cos(), 0.0],
-            [position[0], position[1], position[2], 1.0]
+            [position[0], position[1], position[2], 1.0],
         ]
     }
 }
