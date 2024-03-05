@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let event_loop = winit::event_loop::EventLoopBuilder::new()
         .build();
 
-    let renderer = core::RenderResource::new(&event_loop)?;
+    let renderer = core::RenderResource::new(&event_loop, &conf.window_title, conf.window_size)?;
     game_state.add_resource(renderer);
 
     let game_state_ref = &mut game_state;

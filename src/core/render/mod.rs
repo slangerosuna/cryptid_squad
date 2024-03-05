@@ -45,32 +45,35 @@ const FRAGMENT_SHADER_SRC: &str = r#"
 "#;
 
 // component type 0
+#[derive(Debug)]
 pub struct RenderResource {
     pub window: winit::window::Window,
     pub display: glium::Display<glutin::surface::WindowSurface>,
     pub program: glium::Program,
 }
-impl_resource!(RenderResource);
+impl_resource!(RenderResource, 0);
 
 // component type 1
+#[derive(Debug)]
 pub struct RenderObject;
 impl_component!(RenderObject, 1);
 
 // component type 4
+#[derive(Debug)]
 pub struct Texture<'a> {
     pub sampler: glium::uniforms::Sampler<'a, glium::texture::Texture2d>,
 }
 impl_component!(Texture<'static>, 4);
 
 impl RenderResource {
-    pub const fn get_component_type() -> ComponentType {
-        0
-    }
     pub fn new(
         event_loop: &winit::event_loop::EventLoop<()>,
+        window_title: &str,
+        inner_size: (u32, u32),
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
-            .with_title("Crytid Squad")
+            .with_title(window_title)
+            .with_inner_size(inner_size.0, inner_size.1)
             .build(&event_loop);
         let program = glium::Program::from_source(&display, VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC, None)?;
 
@@ -82,13 +85,8 @@ impl RenderResource {
     }
 }
 
-pub fn get_render_system() -> System {
-    System {
-        system: force_boxed!(render),
-        args: vec![0, 1, 2, 3, 4, 5],
-    }
-}
-
+create_system!(render, get_render_system;
+    uses RenderResource, RenderObject, Texture, Model, Transform, Camera);
 async fn render(game_state: &mut GameState, t: f64, _dt: f64) {
     let render_resource = game_state.get_resource::<RenderResource>().unwrap();
 
@@ -104,13 +102,13 @@ async fn render(game_state: &mut GameState, t: f64, _dt: f64) {
         let id = render_object.owner as usize;
         let entity = game_state.get_entity_mut(id).unwrap();
 
-        /*{
+        {
             let transform = entity.get_component_mut::<Transform>(Transform::get_component_type()).await.unwrap();
 
             //rotate the model
             transform.rotation[1] = (t * 0.5) as f32;
             transform.rotation[0] = (t * 0.3) as f32;
-        }*/
+        }
         let transform = entity.get_component::<Transform>(Transform::get_component_type()).await.unwrap();
         let model = entity.get_component::<Model>(Model::get_component_type()).await.unwrap();
         let texture = entity.get_component::<Texture>(Texture::get_component_type()).await.unwrap();

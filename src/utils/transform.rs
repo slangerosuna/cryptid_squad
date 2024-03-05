@@ -3,6 +3,7 @@ use crate::core::*;
 use std::any::Any;
 
 // component type 2
+#[derive(Debug)]
 pub struct Transform {
     pub position: [f32; 3],
     pub rotation: [f32; 3],

@@ -10,10 +10,15 @@ pub trait Resource: Any {
 }
 
 macro_rules! impl_resource {
-    ($type:ty) => {
+    ($type:ty, $component_type:expr) => {
         impl Resource for $type {
             fn as_any(&self) -> &dyn Any {
                 self
+            }
+        }
+        impl $type {
+            pub const fn get_component_type() -> ComponentType {
+                $component_type
             }
         }
     };
@@ -49,7 +54,7 @@ impl Entity {
     pub async fn get_component<'a, T: Component + 'a>(&'a self, component_type: ComponentType) -> Option<&'a T> {
         for component in &self.components {
             if unsafe { &*component.get() }.component_type == component_type {
-                return unsafe { Some((&(&*component.get()).component as &dyn Any).downcast_ref/*_unchecked()*/().unwrap()) };
+                return unsafe { Some((&*(&*component.get()).component as &dyn Any).downcast_ref/*_unchecked()*/().unwrap()) };
             }
         }
         None
@@ -58,13 +63,14 @@ impl Entity {
     pub async fn get_component_mut<'a, T: Component + 'a>(&'a mut self, component_type: ComponentType) -> Option<&'a mut T> {
         for component in &self.components {
             if unsafe { &*component.get() }.component_type == component_type {
-                return unsafe { Some((&mut (&mut *component.get()).component as &mut dyn Any).downcast_mut/*(_unchecked()*/().unwrap()) };
+                return unsafe { Some((&mut *(&mut *component.get()).component as &mut dyn Any).downcast_mut/*(_unchecked()*/().unwrap()) };
             }
         }
         None
     }
 }
 
+#[derive(Debug)]
 pub struct ComponentStruct {
     pub component: Box<dyn Component>,
     pub owner: u32,
@@ -72,7 +78,7 @@ pub struct ComponentStruct {
 }
 pub type ComponentType = usize;
 
-pub trait Component: Any {
+pub trait Component: Any + std::fmt::Debug {
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -104,6 +110,31 @@ pub struct System {
     pub system: Box<dyn for<'a> Fn(&'a mut GameState, f64, f64) -> Pin<Box<dyn futures::Future<Output = ()> + 'a>> + Send + Sync>,
 }
 
+macro_rules! create_system {
+    ($sys: ident, $getter: ident) => {
+        pub fn $getter() -> System {
+            System {
+                system: force_boxed!($sys),
+                args: Vec::new(),
+            }
+        }
+    };
+    ($sys: ident, $getter: ident; uses $($t:ty),*) => {
+        pub fn $getter() -> System {
+            System {
+                system: force_boxed!($sys),
+                args: vec![expand_types!($($t),*)],
+            }
+        }
+    };
+}
+pub(crate) use create_system;
+
+macro_rules! expand_types {
+    ($t:ty) => { <$t>::get_component_type() };
+    ($t:ty, $($expand:ty),*) => { <$t>::get_component_type(), expand_types!($($expand),*) };
+}
+pub(crate) use expand_types;
 macro_rules! force_boxed {
     ($f:ident) => {
         Box::new(move |game_state, t, dt| Box::pin($f(game_state, t, dt)))

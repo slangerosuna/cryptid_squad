@@ -2,6 +2,7 @@ use crate::core::*;
 use std::any::Any;
 
 // component type 3
+#[derive(Debug)]
 pub struct Camera {
     pub position: [f32; 3],
     pub rotation: [f32; 3],

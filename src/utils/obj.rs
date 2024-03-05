@@ -5,7 +5,7 @@ use glium::{
     *,
 };
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Vertex {
     position: [f32; 3],
     normal: [f32; 3],
@@ -15,6 +15,7 @@ pub struct Vertex {
 implement_vertex!(Vertex, position, normal, uv);
 
 // component type 5
+#[derive(Debug)]
 pub struct Model {
     pub vertices: VertexBuffer<Vertex>,
     pub indices: IndexBuffer<u32>,
