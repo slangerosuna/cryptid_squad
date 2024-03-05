@@ -1,10 +1,14 @@
 use crate::utils::math::matrix::Matrix4;
+use crate::core::*;
+use std::any::Any;
 
+// component type 2
 pub struct Transform {
     pub position: [f32; 3],
     pub rotation: [f32; 3],
     pub scale: [f32; 3],
 }
+impl_component!(Transform, 2);
 
 impl Transform {
     pub const fn new(

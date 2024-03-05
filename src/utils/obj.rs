@@ -1,3 +1,5 @@
+use crate::core::*;
+use std::any::Any;
 use glium::{
     glutin::surface::WindowSurface,
     *,
@@ -12,10 +14,12 @@ pub struct Vertex {
 
 implement_vertex!(Vertex, position, normal, uv);
 
+// component type 5
 pub struct Model {
     pub vertices: VertexBuffer<Vertex>,
     pub indices: IndexBuffer<u32>,
 }
+impl_component!(Model, 5);
 
 macro_rules! err { //creates a macro that returns an error
     () => {

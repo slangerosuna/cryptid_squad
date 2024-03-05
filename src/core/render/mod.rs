@@ -1,4 +1,8 @@
 use crate::core::*;
+use crate::utils::obj::Model;
+use crate::utils::transform::Transform;
+use crate::utils::camera::Camera;
+use glium::*;
 use std::any::Any;
 
 const VERTEX_SHADER_SRC: &str = r#"
@@ -48,7 +52,20 @@ pub struct RenderResource {
 }
 impl_resource!(RenderResource);
 
+// component type 1
+pub struct RenderObject;
+impl_component!(RenderObject, 1);
+
+// component type 4
+pub struct Texture<'a> {
+    pub sampler: glium::uniforms::Sampler<'a, glium::texture::Texture2d>,
+}
+impl_component!(Texture<'static>, 4);
+
 impl RenderResource {
+    pub const fn get_component_type() -> ComponentType {
+        0
+    }
     pub fn new(
         event_loop: &winit::event_loop::EventLoop<()>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
@@ -65,33 +82,57 @@ impl RenderResource {
     }
 }
 
-pub static render_system: System = System {
-    system: render,
-    args: vec![0],
-};
+pub fn get_render_system() -> System {
+    System {
+        system: force_boxed!(render),
+        args: vec![0, 1, 2, 3, 4, 5],
+    }
+}
 
-fn render(game_state: &mut GameState) {
+async fn render(game_state: &mut GameState, t: f64, _dt: f64) {
     let render_resource = game_state.get_resource::<RenderResource>().unwrap();
 
     let mut frame = render_resource.display.draw();
+    let camera = game_state.components[3][0].get();
+    let camera = &unsafe { &*camera }.component;
+    let camera = unsafe { camera.as_any().downcast_ref_unchecked::<crate::utils::camera::Camera>() };
 
-    //rotate the model
-    transform.rotation[1] = t * 0.5;
-    transform.rotation[0] = t * 0.3;
+    for render_object in game_state.components[RenderObject::get_component_type()].iter() {
+        let render_object = render_object.get();
+        let render_object = unsafe { &*render_object };
 
-    frame.clear_color(0.0, 0.0, 0.0, 1.0);
+        let id = render_object.owner as usize;
+        let entity = game_state.get_entity_mut(id).unwrap();
 
-    let uniforms = uniform! {
-        model: transform.get_model().0,
-        view: camera.get_view(),
-        proj: camera.get_proj(),
+        /*{
+            let transform = entity.get_component_mut::<Transform>(Transform::get_component_type()).await.unwrap();
 
-        texture: sampler,
-        ambient: 0.3f32,
-        light: utils::math::normalize([-1.0, 0.4, 0.9f32]),
-    };
+            //rotate the model
+            transform.rotation[1] = (t * 0.5) as f32;
+            transform.rotation[0] = (t * 0.3) as f32;
+        }*/
+        let transform = entity.get_component::<Transform>(Transform::get_component_type()).await.unwrap();
+        let model = entity.get_component::<Model>(Model::get_component_type()).await.unwrap();
+        let texture = entity.get_component::<Texture>(Texture::get_component_type()).await.unwrap();
 
-    if let Err(e) = frame.draw(&model.vertices, &model.indices, &render_resource.program, &uniforms, &Default::default())
-        { eprintln!("Error drawing frame: {}", e.to_string()); return; }
+        let sampler = texture.sampler;
+
+
+        frame.clear_color(0.0, 0.0, 0.0, 1.0);
+
+        let uniforms = uniform! {
+            model: transform.get_model().0,
+            view: camera.get_view(),
+            proj: camera.get_proj(),
+
+            texture: sampler,
+            ambient: 0.3f32,
+            light: crate::utils::math::normalize([-1.0, 0.4, 0.9f32]),
+        };
+
+        if let Err(e) = frame.draw(&model.vertices, &model.indices, &render_resource.program, &uniforms, &Default::default())
+            { eprintln!("Error drawing frame: {}", e.to_string()); return; }
+    }
+
     if let Err(e) = frame.finish() { eprintln!("Error finishing frame: {}", e.to_string()); }
 }

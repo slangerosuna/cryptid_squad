@@ -1,4 +1,5 @@
 use crate::core::*;
+use tokio::time::Instant;
 
 pub struct Scheduler {
     pub init_systems: Vec<System>,
@@ -10,6 +11,8 @@ pub struct Scheduler {
     fixed_update_execution_order: Vec<Vec<usize>>,
 
     pub fixed_update_interval: f64,
+    pub start_time: Instant,
+    prev_time: f64,
 }
 
 impl Scheduler {
@@ -23,6 +26,8 @@ impl Scheduler {
             fixed_update_execution_order: Vec::new(),
 
             fixed_update_interval,
+            start_time: Instant::now(),
+            prev_time: 0.0,
         }
     }
 
@@ -37,6 +42,10 @@ impl Scheduler {
     }
 
     pub async fn update(&mut self, game_state: &mut GameState) {
+        let time = self.get_time();
+        let dt = time - self.prev_time;
+        self.prev_time = time;
+
         for group in self.update_execution_order.iter() {
             let mut futures = Vec::with_capacity(group.len());
 
@@ -50,10 +59,12 @@ impl Scheduler {
                 // race conditions
                 let game_state = unsafe { &mut *(game_state as *mut GameState) };
 
-                futures.push((async move || { (system.system)(game_state) })());
+                futures.push((system.system)(game_state, time, dt));
             }
             // Wait for all futures to complete
-            for future in futures { future.await; }
+            for future in futures {
+                future.await;
+            }
         }
     }
 
@@ -96,5 +107,9 @@ impl Scheduler {
         }
 
         execution_order
+    }
+
+    pub fn get_time(&self) -> f64 {
+        self.start_time.elapsed().as_secs_f64()
     }
 }

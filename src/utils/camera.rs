@@ -1,3 +1,7 @@
+use crate::core::*;
+use std::any::Any;
+
+// component type 3
 pub struct Camera {
     pub position: [f32; 3],
     pub rotation: [f32; 3],
@@ -6,6 +10,7 @@ pub struct Camera {
     pub near: f32,
     pub far: f32,
 }
+impl_component!(Camera, 3);
 
 impl Camera {
     pub const fn new(

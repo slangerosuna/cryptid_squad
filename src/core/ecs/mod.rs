@@ -1,5 +1,8 @@
 use std::any::Any;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::cell::UnsafeCell;
+
 use crate::core::*;
 
 pub trait Resource: Any {
@@ -20,7 +23,7 @@ pub(crate) use impl_resource;
 pub struct Entity {
     pub id: u32,
     pub name: String,
-    pub components: Vec<Arc<ComponentStruct>>,
+    pub components: Vec<Arc<UnsafeCell<ComponentStruct>>>,
 }
 
 impl Entity {
@@ -32,20 +35,30 @@ impl Entity {
         }
     }
 
-    pub fn add_component<T: Component + 'static>(&mut self, mut game_state: &mut GameState, component: T, component_type: ComponentType) {
-        let rc = Arc::new(ComponentStruct {
+    pub fn add_component<'a, T: Component + 'a>(&mut self, game_state: &mut GameState, component: T, component_type: ComponentType) {
+        let rc = Arc::new(UnsafeCell::new(ComponentStruct {
             component: Box::new(component),
             owner: self.id,
-        });
+            component_type,
+        }));
 
         self.components.push(rc.clone());
         game_state.components[component_type].push(rc);
     }
 
-    pub fn get_component<T: Component + 'static>(&self) -> Option<&T> {
+    pub async fn get_component<'a, T: Component + 'a>(&'a self, component_type: ComponentType) -> Option<&'a T> {
         for component in &self.components {
-            if let Some(c) = (component.component.as_ref() as &dyn Any).downcast_ref::<T>() {
-                return Some(c);
+            if unsafe { &*component.get() }.component_type == component_type {
+                return unsafe { Some((&(&*component.get()).component as &dyn Any).downcast_ref/*_unchecked()*/().unwrap()) };
+            }
+        }
+        None
+    }
+
+    pub async fn get_component_mut<'a, T: Component + 'a>(&'a mut self, component_type: ComponentType) -> Option<&'a mut T> {
+        for component in &self.components {
+            if unsafe { &*component.get() }.component_type == component_type {
+                return unsafe { Some((&mut (&mut *component.get()).component as &mut dyn Any).downcast_mut/*(_unchecked()*/().unwrap()) };
             }
         }
         None
@@ -55,6 +68,7 @@ impl Entity {
 pub struct ComponentStruct {
     pub component: Box<dyn Component>,
     pub owner: u32,
+    pub component_type: ComponentType,
 }
 pub type ComponentType = usize;
 
@@ -63,10 +77,16 @@ pub trait Component: Any {
 }
 
 macro_rules! impl_component {
-    ($type:ty) => {
+    ($type:ty, $comp_type:expr) => {
         impl Component for $type {
             fn as_any(&self) -> &dyn Any {
                 self
+            }
+        }
+
+        impl $type {
+            pub const fn get_component_type() -> ComponentType {
+                $comp_type
             }
         }
     };
@@ -81,5 +101,12 @@ pub enum SystemType {
 
 pub struct System {
     pub args: Vec<ComponentType>,
-    pub system: fn(&mut GameState),
+    pub system: Box<dyn for<'a> Fn(&'a mut GameState, f64, f64) -> Pin<Box<dyn futures::Future<Output = ()> + 'a>> + Send + Sync>,
 }
+
+macro_rules! force_boxed {
+    ($f:ident) => {
+        Box::new(move |game_state, t, dt| Box::pin($f(game_state, t, dt)))
+    };
+}
+pub(crate) use force_boxed;
