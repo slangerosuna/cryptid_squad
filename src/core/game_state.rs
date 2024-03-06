@@ -1,9 +1,10 @@
 use crate::core::*;
+use std::any::Any;
 use std::sync::Arc;
 use std::cell::UnsafeCell;
 
 // increase this every time you add a new component type
-const COMPONENT_TYPES: usize = 6;
+const COMPONENT_TYPES: usize = 7;
 
 pub struct GameState {
     pub entities: Vec<Arc<UnsafeCell<Entity>>>,
@@ -14,6 +15,10 @@ pub struct GameState {
 }
 
 impl GameState {
+    pub const fn get_component_type() -> ComponentType {
+        COMPONENT_TYPES
+    }
+
     pub fn new() -> GameState {
         GameState {
             entities: Vec::new(),
@@ -45,6 +50,55 @@ impl GameState {
             return None;
         }
         Some(unsafe { &mut *self.entities[id].get() })
+    }
+
+    pub fn get_entities_with<'a, T: Component>(&'a self, component_type: ComponentType) -> Vec<&'a Entity> {
+        self.components[component_type]
+            .iter()
+            .map(|component| {
+                let component = component.get();
+                let entity = unsafe {&*component}.owner as usize;
+                unsafe { &*self.entities[entity].get() }
+            })
+            .collect()
+    }
+
+    pub fn get_entities_with_mut<'a, T: Component>(&'a mut self, component_type: ComponentType) -> Vec<&'a mut Entity> {
+        self.components[component_type]
+            .iter_mut()
+            .map(|component| {
+                let component = component.get();
+                let entity = unsafe {&*component}.owner as usize;
+                unsafe { &mut *self.entities[entity].get() }
+            })
+            .collect()
+    }
+
+    pub fn get_components<'a, T: Component>(&'a self, component_type: ComponentType) -> Vec<&'a T> {
+        self.components[component_type]
+            .iter()
+            .map(|component| {
+                let component = component.get();
+                let component = unsafe { &*component };
+                let component = &component.component;
+                let component = &**component;
+                unsafe { (component as &dyn Any).downcast_ref_unchecked::<T>() }
+            })
+            .collect()
+    }
+
+    pub fn get_components_mut<'a, T: Component>(&'a mut self, component_type: ComponentType) -> Vec<&'a mut T> {
+        self.components[component_type]
+            .iter_mut()
+            .map(|component| {
+                let component = component.get();
+                let component = unsafe { &mut *component };
+                let component = &mut component.component;
+                let component = &mut **component;
+                let component = unsafe{(component as &mut dyn std::any::Any).downcast_mut_unchecked::<T>() };
+                component
+            })
+            .collect()
     }
 
     pub fn add_resource<T: Resource>(&mut self, resource: T) {

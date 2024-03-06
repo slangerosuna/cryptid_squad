@@ -11,13 +11,13 @@ pub trait Resource: Any {
 
 macro_rules! impl_resource {
     ($type:ty, $component_type:expr) => {
-        impl Resource for $type {
-            fn as_any(&self) -> &dyn Any {
+        impl crate::core::Resource for $type {
+            fn as_any(&self) -> &dyn std::any::Any {
                 self
             }
         }
         impl $type {
-            pub const fn get_component_type() -> ComponentType {
+            pub const fn get_component_type() -> crate::core::ComponentType {
                 $component_type
             }
         }
@@ -51,19 +51,19 @@ impl Entity {
         game_state.components[component_type].push(rc);
     }
 
-    pub async fn get_component<'a, T: Component + 'a>(&'a self, component_type: ComponentType) -> Option<&'a T> {
+    pub fn get_component<'a, T: Component + 'a>(&'a self, component_type: ComponentType) -> Option<&'a T> {
         for component in &self.components {
             if unsafe { &*component.get() }.component_type == component_type {
-                return unsafe { Some((&*(&*component.get()).component as &dyn Any).downcast_ref/*_unchecked()*/().unwrap()) };
+                return unsafe { Some((&*(&*component.get()).component as &dyn Any).downcast_ref_unchecked()) };
             }
         }
         None
     }
 
-    pub async fn get_component_mut<'a, T: Component + 'a>(&'a mut self, component_type: ComponentType) -> Option<&'a mut T> {
+    pub fn get_component_mut<'a, T: Component + 'a>(&'a mut self, component_type: ComponentType) -> Option<&'a mut T> {
         for component in &self.components {
             if unsafe { &*component.get() }.component_type == component_type {
-                return unsafe { Some((&mut *(&mut *component.get()).component as &mut dyn Any).downcast_mut/*(_unchecked()*/().unwrap()) };
+                return unsafe { Some((&mut *(&mut *component.get()).component as &mut dyn Any).downcast_mut_unchecked()) };
             }
         }
         None

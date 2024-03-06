@@ -29,7 +29,7 @@ impl Transform {
         let rotation = self.get_rotation();
         let scale = self.get_scale();
 
-        translation * rotation * scale
+        rotation * scale * translation
     }
 
     pub const fn get_scale(&self) -> Matrix4 {

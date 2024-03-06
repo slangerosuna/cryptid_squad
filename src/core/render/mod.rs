@@ -1,4 +1,5 @@
 use crate::core::*;
+use crate::*;
 use crate::utils::obj::Model;
 use crate::utils::transform::Transform;
 use crate::utils::camera::Camera;
@@ -96,35 +97,62 @@ impl RenderResource<'_> {
     }
 }
 
+const SPEED: f32 = 5.0;
+
+create_system!(rotate_cube, get_rotate_cube_system;
+    uses Transform, InputHandler);
+async fn rotate_cube(game_state: &mut GameState, t: f64, dt: f64) {
+    let input = game_state.get_resource::<InputHandler>().unwrap();
+    let forward =
+        if input.is_down(winit::event::VirtualKeyCode::W) { dt as f32 * SPEED }
+        else if input.is_down(winit::event::VirtualKeyCode::S) { -dt as f32 * SPEED }
+        else { 0.0 };
+
+    let right =
+        if input.is_down(winit::event::VirtualKeyCode::A) { -dt as f32 * SPEED }
+        else if input.is_down(winit::event::VirtualKeyCode::D) { dt as f32 * SPEED }
+        else { 0.0 };
+
+    for transform in game_state
+                        .get_components_mut::<Transform>
+                            (Transform::get_component_type())
+                        .iter_mut()
+    {
+        transform.rotation[1] = (t * 0.5) as f32;
+        transform.rotation[0] = (t * 0.3) as f32;
+
+        transform.position[0] += right;
+        transform.position[1] += forward;
+    }
+}
+
 create_system!(render, get_render_system;
     uses RenderResource, RenderObject, Texture, Model, Transform, Camera);
-async fn render(game_state: &mut GameState, t: f64, _dt: f64) {
+async fn render(game_state: &mut GameState, _t: f64, _dt: f64) {
     let render_resource = game_state.get_resource::<RenderResource>().unwrap();
 
     let mut frame = render_resource.display.draw();
     frame.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
 
-    let camera = game_state.components[3][0].get();
-    let camera = &unsafe { &*camera }.component;
-    let camera = unsafe { camera.as_any().downcast_ref_unchecked::<crate::utils::camera::Camera>() };
+    let camera: &Camera = game_state.get_components(Camera::get_component_type())[0];
 
-    for render_object in game_state.components[RenderObject::get_component_type()].iter() {
-        let render_object = render_object.get();
-        let render_object = unsafe { &*render_object };
-
-        let id = render_object.owner as usize;
-        let entity = game_state.get_entity_mut(id).unwrap();
-
-        {
-            let transform = entity.get_component_mut::<Transform>(Transform::get_component_type()).await.unwrap();
-
-            //rotate the model
-            transform.rotation[1] = (t * 0.5) as f32;
-            transform.rotation[0] = (t * 0.3) as f32;
-        }
-        let transform = entity.get_component::<Transform>(Transform::get_component_type()).await.unwrap();
-        let model = entity.get_component::<Model>(Model::get_component_type()).await.unwrap();
-        let texture = entity.get_component::<Texture>(Texture::get_component_type()).await.unwrap();
+    for entity in game_state
+                    .get_entities_with::<RenderObject>
+                        (RenderObject::get_component_type())
+                    .iter()
+    {
+        let transform = entity
+                        .get_component::<Transform>
+                            (Transform::get_component_type())
+                        .unwrap();
+        let model = entity
+                        .get_component::<Model>
+                            (Model::get_component_type())
+                        .unwrap();
+        let texture = entity
+                        .get_component::<Texture>
+                            (Texture::get_component_type())
+                        .unwrap();
 
         let sampler = texture.sampler;
 
@@ -135,7 +163,7 @@ async fn render(game_state: &mut GameState, t: f64, _dt: f64) {
 
             texture: sampler,
             ambient: 0.3f32,
-            light: crate::utils::math::normalize([-1.0, 5.0, 0.9]),
+            light: normalize([-1.0, 5.0, 0.9]),
         };
 
 

@@ -83,20 +83,25 @@ impl Scheduler {
                 let mut group = vec![i];
                 let mut dissallowed_components = systems[i].args.clone();
 
-                for j in 0..systems.len() {
-                    if !visited[j] {
-                        let mut can_run = true;
-                        for component in &systems[j].args {
-                            if dissallowed_components.contains(component) {
-                                can_run = false;
-                                break;
-                            }
-                        }
-                        if can_run {
-                            group.push(j);
-                            visited[j] = true;
+                if !dissallowed_components.contains(&GameState::get_component_type()) {
+                    for j in 0..systems.len() {
+                        if !visited[j] {
+                            let mut can_run = true;
+
                             for component in &systems[j].args {
-                                dissallowed_components.push(*component);
+                                if dissallowed_components.contains(component)
+                                || *component == GameState::get_component_type() {
+                                    can_run = false;
+                                    break;
+                                }
+                            }
+                            if can_run {
+                                group.push(j);
+                                visited[j] = true;
+                                for component in &systems[j].args {
+                                    if !dissallowed_components.contains(component)
+                                      { dissallowed_components.push(*component); }
+                                }
                             }
                         }
                     }

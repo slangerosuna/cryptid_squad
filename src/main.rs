@@ -1,9 +1,11 @@
 #![feature(async_closure)]
 #![feature(downcast_unchecked)]
+
 mod utils;
 mod core;
 
-use core::*;
+pub use core::*;
+pub use utils::*;
 
 use glium::*;
 use glium::uniforms::Sampler;
@@ -59,6 +61,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let renderer = unsafe { &*(renderer as *const RenderResource) }; // bypasses lifetime issues
 
     scheduler.add_system(get_render_system(), SystemType::Update);
+    scheduler.add_system(get_rotate_cube_system(), SystemType::Update);
+    scheduler.add_system(get_input_handler_system(), SystemType::Update);
 
     let model = rt.block_on(utils::obj::parse_object(
         "assets/models/teapot.obj",
@@ -105,20 +109,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let teapot = game_state.create_entity("Teapot".to_string());
 
-    teapot.add_component(&mut game_state, transform, utils::transform::Transform::get_component_type());
-    teapot.add_component(&mut game_state, model, utils::obj::Model::get_component_type());
+    teapot.add_component(&mut game_state, transform, Transform::get_component_type());
+    teapot.add_component(&mut game_state, model, Model::get_component_type());
     teapot.add_component(&mut game_state, Texture { sampler }, Texture::get_component_type());
 
-    teapot.add_component(&mut game_state, core::RenderObject, core::RenderObject::get_component_type());
+    teapot.add_component(&mut game_state, RenderObject, RenderObject::get_component_type());
 
     let camera_entity = game_state.create_entity("Camera".to_string());
 
     camera_entity.add_component(&mut game_state, camera, 3);
 
     // safe to get the component mut here because we don't mutate during the init, update, or fixed_update phases
-    let camera = rt.block_on(camera_entity.get_component_mut::<utils::camera::Camera>(utils::camera::Camera::get_component_type())).unwrap();
+    let camera = camera_entity.get_component_mut::<Camera>(Camera::get_component_type()).unwrap();
 
-    let mut input_handler = utils::input_handling::InputHandler::new();
+    let input_handler = InputHandler::new();
+    game_state.add_resource(input_handler);
+
+    let input_handler = game_state.get_resource_mut::<InputHandler>().unwrap();
+    // allows there to only be one mutable reference to the input handler
+    let input_handler = input_handler as *mut InputHandler;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = winit::event_loop::ControlFlow::Poll;
@@ -128,21 +137,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 winit::event::WindowEvent::CloseRequested => close(control_flow, rt),
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
                     if let Some(key) = input.virtual_keycode {
-                        input_handler.handle_key_press(key, input.state);
+                        unsafe {&mut *input_handler}.handle_key_press(key, input.state);
                         match key {
                             winit::event::VirtualKeyCode::Escape => close(control_flow, rt),
                             _ => (),
                         }
                     }
                 },
-                // Resize the window if the size has changed
                 winit::event::WindowEvent::Resized(physical_size) => {
                     camera.aspect_ratio = physical_size.width as f32 / physical_size.height as f32;
                 },
                 _ => (),
             },
             winit::event::Event::RedrawRequested(_) => {
-                input_handler.periodic();
                 rt.block_on(scheduler.update(&mut game_state));
             },
             winit::event::Event::RedrawEventsCleared => renderer.window.request_redraw(),

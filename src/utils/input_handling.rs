@@ -1,5 +1,7 @@
 use winit::event::*;
 
+use crate::*;
+
 pub struct InputHandler {
     pub keys: [u8; 21], // each key is a bit, 0 up, 1 down
 
@@ -9,6 +11,7 @@ pub struct InputHandler {
 
     pub callbacks: std::collections::HashMap<VirtualKeyCode, Vec<Box<dyn FnMut()>>>,
 }
+impl_resource!(InputHandler, 6);
 
 impl InputHandler {
     pub fn new() -> InputHandler {
@@ -43,13 +46,19 @@ impl InputHandler {
         self.keys[key as usize / 8] & (1 << (key as usize % 8)) != 0
     }
 
-    pub fn periodic(&mut self) {
-        self.mouse_delta = (self.mouse_pos.0 - self.prev_mouse_pos.0, self.mouse_pos.1 - self.prev_mouse_pos.1);
-        self.prev_mouse_pos = self.mouse_pos;
-    }
 
     pub fn register_callback(&mut self, key: VirtualKeyCode, callback: Box<dyn FnMut()>) {
         if let Some(callbacks) = self.callbacks.get_mut(&key) { callbacks.push(callback); }
         else { self.callbacks.insert(key, vec![callback]); }
     }
+}
+
+create_system!(periodic, get_input_handler_system;
+    uses InputHandler);
+pub async fn periodic(game_state: &mut GameState, _t: f64, _dt: f64) {
+    let input_handler = game_state.get_resource_mut::<InputHandler>().unwrap();
+
+    input_handler.mouse_delta = (input_handler.mouse_pos.0 - input_handler.prev_mouse_pos.0,
+                                 input_handler.mouse_pos.1 - input_handler.prev_mouse_pos.1);
+    input_handler.prev_mouse_pos = input_handler.mouse_pos;
 }
