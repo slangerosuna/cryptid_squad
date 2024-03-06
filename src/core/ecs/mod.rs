@@ -119,22 +119,17 @@ macro_rules! create_system {
             }
         }
     };
-    ($sys: ident, $getter: ident; uses $($t:ty),*) => {
+    ($sys: ident, $getter: ident; uses $($t:ty),+) => {
         pub fn $getter() -> System {
             System {
                 system: force_boxed!($sys),
-                args: vec![expand_types!($($t),*)],
+                args: vec![$(<$t>::get_component_type()),+],
             }
         }
     };
 }
 pub(crate) use create_system;
 
-macro_rules! expand_types {
-    ($t:ty) => { <$t>::get_component_type() };
-    ($t:ty, $($expand:ty),*) => { <$t>::get_component_type(), expand_types!($($expand),*) };
-}
-pub(crate) use expand_types;
 macro_rules! force_boxed {
     ($f:ident) => {
         Box::new(move |game_state, t, dt| Box::pin($f(game_state, t, dt)))

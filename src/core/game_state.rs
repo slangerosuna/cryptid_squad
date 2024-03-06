@@ -59,4 +59,13 @@ impl GameState {
         }
         None
     }
+
+    pub fn get_resource_mut<'a, T: Resource>(&'a mut self) -> Option<&'a mut T> {
+        for resource in &mut self.resources {
+            if let Some(r) = (resource.as_mut() as &mut dyn std::any::Any).downcast_mut::<T>() {
+                return Some(r);
+            }
+        }
+        None
+    }
 }

@@ -47,6 +47,13 @@ pub async fn parse_object(
     let mut vertex_uvs: Vec<[f32; 2]> = Vec::new();
 
     for line in lines {
+        // if the first char is #, ignore the line
+        if line.is_empty() || line.as_bytes()[0] == "#".as_bytes()[0]
+          { continue; }
+
+        // ignore comments
+        let line = line.split("#").next().unwrap();
+
         let mut words = line.split_whitespace();
 
         match words.next() {
@@ -118,8 +125,8 @@ pub async fn parse_object(
 
     let vertices = vertices.iter().map(|x| {
         let position = vertex_positions[x.0 as usize];
-        let normal = vertex_normals[x.1 as usize];
-        let uv = vertex_uvs[x.2 as usize];
+        let normal = vertex_normals[x.2 as usize];
+        let uv = vertex_uvs[x.1 as usize];
 
         Vertex {
             position,

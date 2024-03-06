@@ -38,7 +38,7 @@ const FRAGMENT_SHADER_SRC: &str = r#"
     out vec4 color;
 
     void main() {
-        float intensity = clamp(dot(vNormal, light), 0.0, 1.0 - ambient) + ambient;
+        float intensity = clamp(dot(vNormal, light), 0.0, 1.0) * (1.0 - ambient) + ambient;
 
         color = texture2D(texture, vUv) * vec4(intensity, intensity, intensity, 1.0);
     }
@@ -46,12 +46,13 @@ const FRAGMENT_SHADER_SRC: &str = r#"
 
 // component type 0
 #[derive(Debug)]
-pub struct RenderResource {
+pub struct RenderResource<'a> {
     pub window: winit::window::Window,
     pub display: glium::Display<glutin::surface::WindowSurface>,
     pub program: glium::Program,
+    pub params: glium::DrawParameters<'a>,
 }
-impl_resource!(RenderResource, 0);
+impl_resource!(RenderResource<'static>, 0);
 
 // component type 1
 #[derive(Debug)]
@@ -65,7 +66,7 @@ pub struct Texture<'a> {
 }
 impl_component!(Texture<'static>, 4);
 
-impl RenderResource {
+impl RenderResource<'_> {
     pub fn new(
         event_loop: &winit::event_loop::EventLoop<()>,
         window_title: &str,
@@ -77,10 +78,20 @@ impl RenderResource {
             .build(&event_loop);
         let program = glium::Program::from_source(&display, VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC, None)?;
 
+        let params = glium::DrawParameters {
+            depth: glium::Depth {
+                test: glium::draw_parameters::DepthTest::IfLess,
+                write: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
         Ok(Self{
             window,
             display,
             program,
+            params,
         })
     }
 }
@@ -91,6 +102,8 @@ async fn render(game_state: &mut GameState, t: f64, _dt: f64) {
     let render_resource = game_state.get_resource::<RenderResource>().unwrap();
 
     let mut frame = render_resource.display.draw();
+    frame.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+
     let camera = game_state.components[3][0].get();
     let camera = &unsafe { &*camera }.component;
     let camera = unsafe { camera.as_any().downcast_ref_unchecked::<crate::utils::camera::Camera>() };
@@ -115,9 +128,6 @@ async fn render(game_state: &mut GameState, t: f64, _dt: f64) {
 
         let sampler = texture.sampler;
 
-
-        frame.clear_color(0.0, 0.0, 0.0, 1.0);
-
         let uniforms = uniform! {
             model: transform.get_model().0,
             view: camera.get_view(),
@@ -125,10 +135,11 @@ async fn render(game_state: &mut GameState, t: f64, _dt: f64) {
 
             texture: sampler,
             ambient: 0.3f32,
-            light: crate::utils::math::normalize([-1.0, 0.4, 0.9f32]),
+            light: crate::utils::math::normalize([-1.0, 5.0, 0.9]),
         };
 
-        if let Err(e) = frame.draw(&model.vertices, &model.indices, &render_resource.program, &uniforms, &Default::default())
+
+        if let Err(e) = frame.draw(&model.vertices, &model.indices, &render_resource.program, &uniforms, &render_resource.params)
             { eprintln!("Error drawing frame: {}", e.to_string()); return; }
     }
 
