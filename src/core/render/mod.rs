@@ -1,9 +1,8 @@
-use crate::core::*;
 use crate::*;
-use crate::utils::obj::Model;
-use crate::utils::transform::Transform;
-use crate::utils::camera::Camera;
-use glium::*;
+use std::ffi::CString;
+use glium::{backend::Facade, *};
+use glutin::display::{Display, GlDisplay};
+use glutin::surface::WindowSurface;
 use std::any::Any;
 
 const VERTEX_SHADER_SRC: &str = r#"
@@ -49,7 +48,7 @@ const FRAGMENT_SHADER_SRC: &str = r#"
 #[derive(Debug)]
 pub struct RenderResource<'a> {
     pub window: winit::window::Window,
-    pub display: glium::Display<glutin::surface::WindowSurface>,
+    pub display: glium::Display<WindowSurface>,
     pub program: glium::Program,
     pub params: glium::DrawParameters<'a>,
 }
@@ -76,7 +75,8 @@ impl RenderResource<'_> {
         let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
             .with_title(window_title)
             .with_inner_size(inner_size.0, inner_size.1)
-            .build(&event_loop);
+            .build(event_loop);
+
         let program = glium::Program::from_source(&display, VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC, None)?;
 
         let params = glium::DrawParameters {
@@ -85,9 +85,9 @@ impl RenderResource<'_> {
                 write: true,
                 ..Default::default()
             },
+            backface_culling: glium::draw_parameters::BackfaceCullingMode::CullClockwise,
             ..Default::default()
         };
-
         Ok(Self{
             window,
             display,
@@ -126,33 +126,38 @@ async fn rotate_cube(game_state: &mut GameState, t: f64, dt: f64) {
     }
 }
 
+//uses GameState to ensure that it can unlock the scheduler lock
 create_system!(render, get_render_system;
-    uses RenderResource, RenderObject, Texture, Model, Transform, Camera);
+    uses GameState, RenderResource, RenderObject, Texture, Model, Transform, Camera);
 async fn render(game_state: &mut GameState, _t: f64, _dt: f64) {
     let render_resource = game_state.get_resource::<RenderResource>().unwrap();
+
+    // unlocks global scheduler lock to allow for FixedUpdate to run while waiting for vsync
+    unsafe { (&*game_state.scheduler).force_unlock().await; }
 
     let mut frame = render_resource.display.draw();
     frame.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
 
-    let camera: &Camera = game_state.get_components(Camera::get_component_type())[0];
+    unsafe { (&*game_state.scheduler).force_lock().await; }
 
-    for entity in game_state
-                    .get_entities_with::<RenderObject>
-                        (RenderObject::get_component_type())
-                    .iter()
+    let camera: &Camera
+        = game_state.get_components
+            (Camera::get_component_type())[0];
+
+    for entity in
+        game_state
+            .get_entities_with::<RenderObject>
+                (RenderObject::get_component_type())
+            .iter()
     {
-        let transform = entity
-                        .get_component::<Transform>
-                            (Transform::get_component_type())
-                        .unwrap();
-        let model = entity
-                        .get_component::<Model>
-                            (Model::get_component_type())
-                        .unwrap();
-        let texture = entity
-                        .get_component::<Texture>
-                            (Texture::get_component_type())
-                        .unwrap();
+        let transform = entity.get_component::<Transform>(Transform::get_component_type());
+        let transform = if let Some(transform) = transform { transform } else { continue; };
+
+        let model = entity.get_component::<Model>(Model::get_component_type());
+        let model = if let Some(model) = model { model } else { continue; };
+
+        let texture = entity.get_component::<Texture>(Texture::get_component_type());
+        let texture = if let Some(texture) = texture { texture } else { continue; };
 
         let sampler = texture.sampler;
 

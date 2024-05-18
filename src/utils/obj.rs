@@ -1,5 +1,5 @@
 use crate::core::*;
-use std::any::Any;
+use std::{any::Any, collections::HashMap};
 use glium::{
     glutin::surface::WindowSurface,
     *,
@@ -36,6 +36,7 @@ pub async fn parse_object(
     display: &glium::Display<WindowSurface>,
 ) -> Result<Model, Box<dyn std::error::Error>> {
     let mut vertices: Vec<(u32, u32, u32)> = Vec::new(); // (position, normal, uv)
+    let mut vertex_index_map: HashMap<(u32, u32, u32), u32> = HashMap::new();
     let mut indices: Vec<u32> = Vec::new();
 
     let contents = std::fs::read_to_string(path)?;
@@ -47,11 +48,11 @@ pub async fn parse_object(
     let mut vertex_uvs: Vec<[f32; 2]> = Vec::new();
 
     for line in lines {
-        // if the first char is #, ignore the line
+        // skips empty lines and comments
         if line.is_empty() || line.as_bytes()[0] == "#".as_bytes()[0]
           { continue; }
 
-        // ignore comments
+        // removes comments from the line
         let line = line.split("#").next().unwrap();
 
         let mut words = line.split_whitespace();
@@ -74,34 +75,26 @@ pub async fn parse_object(
                         .unwrap()
                 ).collect();
 
+
+                let handle_vertex = |x: [u32; 3]| {
+                    let x = (x[0], x[1], x[2]);
+
+                    if let Some(index) = vertex_index_map.get(&x) {
+                        indices.push(*index);
+                        return;
+                    }
+
+                    let index = vertices.len() as u32;
+                    vertices.push(x);
+                    indices.push(index);
+                    vertex_index_map.insert(x, index);
+                };
                 match f.len() {
-                    3 => f.into_iter().for_each(|x: [u32; 3]| {
-                        let x = (x[0], x[1], x[2]);
-
-                        if let Some(index) = vertices.iter().position(|y| *y == x) {
-                            indices.push(index as u32);
-                            return;
-                        }
-
-                        let index = vertices.len() as u32;
-                        vertices.push(x);
-                        indices.push(index);
-                    }),
+                    3 => f.into_iter().for_each(handle_vertex),
                     4 => {
                         //converts the quad into two triangles
                         [f[0], f[1], f[2],
-                         f[0], f[2], f[3]].into_iter().for_each(|x: [u32; 3]| {
-                            let x = (x[0], x[1], x[2]);
-
-                            if let Some(index) = vertices.iter().position(|y| *y == x) {
-                                indices.push(index as u32);
-                                return;
-                            }
-
-                            let index = vertices.len() as u32;
-                            vertices.push(x);
-                            indices.push(index);
-                        });
+                         f[0], f[2], f[3]].into_iter().for_each(handle_vertex);
                     },
                     _ => return Err(Box::new(err!())),
                 }

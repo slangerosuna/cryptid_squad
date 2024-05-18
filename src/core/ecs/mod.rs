@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::cell::UnsafeCell;
+use std::cell::SyncUnsafeCell;
 
 use crate::core::*;
 
@@ -28,7 +28,7 @@ pub(crate) use impl_resource;
 pub struct Entity {
     pub id: u32,
     pub name: String,
-    pub components: Vec<Arc<UnsafeCell<ComponentStruct>>>,
+    pub components: Vec<Arc<SyncUnsafeCell<ComponentStruct>>>,
 }
 
 impl Entity {
@@ -41,7 +41,7 @@ impl Entity {
     }
 
     pub fn add_component<'a, T: Component + 'a>(&mut self, game_state: &mut GameState, component: T, component_type: ComponentType) {
-        let rc = Arc::new(UnsafeCell::new(ComponentStruct {
+        let rc = Arc::new(SyncUnsafeCell::new(ComponentStruct {
             component: Box::new(component),
             owner: self.id,
             component_type,
@@ -103,11 +103,12 @@ pub enum SystemType {
     Init,
     Update,
     FixedUpdate,
+    Close,
 }
 
 pub struct System {
     pub args: Vec<ComponentType>,
-    pub system: Box<dyn for<'a> Fn(&'a mut GameState, f64, f64) -> Pin<Box<dyn futures::Future<Output = ()> + 'a>> + Send + Sync>,
+    pub system: Box<dyn Fn(*mut GameState, f64, f64) -> Pin<Box<dyn futures::Future<Output = ()>>> + Send + Sync>,
 }
 
 macro_rules! create_system {
@@ -132,7 +133,7 @@ pub(crate) use create_system;
 
 macro_rules! force_boxed {
     ($f:ident) => {
-        Box::new(move |game_state, t, dt| Box::pin($f(game_state, t, dt)))
+        Box::new(|game_state, t, dt| Box::pin($f(unsafe { &mut *game_state }, t, dt)))
     };
 }
 pub(crate) use force_boxed;
