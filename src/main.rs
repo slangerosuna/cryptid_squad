@@ -1,17 +1,18 @@
 #![feature(async_closure)]
 #![feature(downcast_unchecked)]
 #![feature(sync_unsafe_cell)]
+#![feature(trait_upcasting)]
 
-mod utils;
 mod core;
 mod networking;
+mod utils;
 
 pub use core::*;
-pub use utils::*;
 pub use networking::*;
+pub use utils::*;
 
-use glium::*;
 use glium::uniforms::Sampler;
+use glium::*;
 
 use serde::*;
 
@@ -48,9 +49,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let conf: &'static Config = unsafe { &*(conf as *const _) };
 
     let rt = tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(conf.worker_threads)
-                .enable_all()
-                .build()?;
+        .worker_threads(conf.worker_threads)
+        .enable_all()
+        .build()?;
 
     let rt = Box::leak(Box::new(rt));
     let rt: &'static tokio::runtime::Runtime = unsafe { &*(rt as *const _) };
@@ -58,8 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut scheduler = Scheduler::new(0.01);
     let mut game_state = core::GameState::new(&mut scheduler as *mut Scheduler, conf);
 
-    let event_loop = winit::event_loop::EventLoopBuilder::new()
-        .build();
+    let event_loop = winit::event_loop::EventLoopBuilder::new().build();
 
     let renderer = core::RenderResource::new(&event_loop, &conf.window_title, conf.window_size)?;
     game_state.add_resource(renderer);
@@ -79,7 +79,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &renderer.display,
     ))?;
 
-
     let dimensions = &renderer.display.get_max_viewport_dimensions();
     let camera = utils::camera::Camera::new(
         [0.0, 0.0, -5.0],
@@ -90,11 +89,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         100.0,
     );
 
-    let transform = utils::transform::Transform::new(
-        [0.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0],
-        [1.0, 1.0, 1.0],
-    );
+    let transform =
+        utils::transform::Transform::new([0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
 
     let image_file = std::fs::File::open("assets/textures/teapot.png")?;
     let image_reader = std::io::BufReader::new(image_file);
@@ -103,17 +99,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let image_dimensions = image.dimensions();
 
-    let image = glium::texture::RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dimensions);
+    let image =
+        glium::texture::RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dimensions);
 
-    let texture = glium::texture::Texture2d::new(
-        &renderer.display,
-        image,
-    )?;
+    let texture = glium::texture::Texture2d::new(&renderer.display, image)?;
 
     // gives texture a static lifetime to allow it to be used in the draw loop
     let texture: &'static Texture2d = unsafe { &*(&texture as *const _) };
 
-    let sampler: Sampler<'static, _>  = texture.sampled()
+    let sampler: Sampler<'static, _> = texture
+        .sampled()
         .magnify_filter(glium::uniforms::MagnifySamplerFilter::Linear)
         .minify_filter(glium::uniforms::MinifySamplerFilter::Linear);
 
@@ -121,15 +116,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     teapot.add_component(&mut game_state, transform, Transform::get_component_type());
     teapot.add_component(&mut game_state, model, Model::get_component_type());
-    teapot.add_component(&mut game_state, Texture { sampler }, Texture::get_component_type());
+    teapot.add_component(
+        &mut game_state,
+        Texture { sampler },
+        Texture::get_component_type(),
+    );
 
-    teapot.add_component(&mut game_state, RenderObject, RenderObject::get_component_type());
+    teapot.add_component(
+        &mut game_state,
+        RenderObject,
+        RenderObject::get_component_type(),
+    );
 
     let camera_entity = game_state.create_entity("Camera".to_string());
 
     camera_entity.add_component(&mut game_state, camera, 3);
 
-    let camera = camera_entity.get_component_mut::<Camera>(Camera::get_component_type()).unwrap();
+    let camera = camera_entity
+        .get_component_mut::<Camera>(Camera::get_component_type())
+        .unwrap();
     let camera = camera as *mut Camera;
 
     let input_handler = InputHandler::new();
@@ -140,10 +145,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     rt.block_on(scheduler.init(&mut game_state));
 
-    let fixed_update_scheduler = unsafe {&*(&scheduler as *const Scheduler)};
+    let fixed_update_scheduler = unsafe { &*(&scheduler as *const Scheduler) };
     let fixed_update_future = fixed_update_scheduler.loop_fixed_update(&mut game_state as *mut _);
     let mut fixed_update_future = unsafe { SendBox::new(fixed_update_future) };
-    let fixed_update_future = unsafe { std::pin::Pin::new_unchecked(&mut *(&mut fixed_update_future as *mut _)) };
+    let fixed_update_future =
+        unsafe { std::pin::Pin::new_unchecked(&mut *(&mut fixed_update_future as *mut _)) };
     rt.spawn(fixed_update_future);
 
     event_loop.run(move |event, _, control_flow| {
@@ -154,16 +160,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 winit::event::WindowEvent::CloseRequested => close(control_flow, rt),
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
                     if let Some(key) = input.virtual_keycode {
-                        unsafe {&mut *input_handler}.handle_key_press(key, input.state);
+                        unsafe { &mut *input_handler }.handle_key_press(key, input.state);
                         match key {
                             winit::event::VirtualKeyCode::Escape => close(control_flow, rt),
                             _ => (),
                         }
                     }
-                },
+                }
                 winit::event::WindowEvent::Resized(physical_size) => {
-                    unsafe {&mut *camera}.aspect_ratio = physical_size.width as f32 / physical_size.height as f32;
-                },
+                    unsafe { &mut *camera }.aspect_ratio =
+                        physical_size.width as f32 / physical_size.height as f32;
+                }
                 _ => (),
             },
             winit::event::Event::RedrawRequested(_) => {
@@ -172,7 +179,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     rt.block_on(scheduler.close(&mut game_state));
                     close(control_flow, rt);
                 }
-            },
+            }
             winit::event::Event::RedrawEventsCleared => renderer.window.request_redraw(),
             _ => (),
         }
@@ -195,19 +202,21 @@ where
 {
     type Output = T::Output;
 
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context) -> std::task::Poll<Self::Output> {
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context,
+    ) -> std::task::Poll<Self::Output> {
         self.0.as_mut().poll(cx)
     }
 }
 
-fn close(
-    control_flow: &mut winit::event_loop::ControlFlow,
-    rt: &'static tokio::runtime::Runtime,
-) {
+fn close(control_flow: &mut winit::event_loop::ControlFlow, rt: &'static tokio::runtime::Runtime) {
     *control_flow = winit::event_loop::ControlFlow::Exit;
 
     // drop the runtime to ensure all tasks are finished
-    unsafe { std::ptr::drop_in_place(rt as *const _ as *mut tokio::runtime::Runtime); }
+    unsafe {
+        std::ptr::drop_in_place(rt as *const _ as *mut tokio::runtime::Runtime);
+    }
 
     std::process::exit(0);
 }

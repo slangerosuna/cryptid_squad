@@ -1,9 +1,6 @@
 use crate::core::*;
+use glium::{glutin::surface::WindowSurface, *};
 use std::{any::Any, collections::HashMap};
-use glium::{
-    glutin::surface::WindowSurface,
-    *,
-};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex {
@@ -22,12 +19,10 @@ pub struct Model {
 }
 impl_component!(Model, 5);
 
-macro_rules! err { //creates a macro that returns an error
+macro_rules! err {
+    //creates a macro that returns an error
     () => {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Invalid obj file",
-        )
+        std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid obj file")
     };
 }
 
@@ -49,8 +44,9 @@ pub async fn parse_object(
 
     for line in lines {
         // skips empty lines and comments
-        if line.is_empty() || line.as_bytes()[0] == "#".as_bytes()[0]
-          { continue; }
+        if line.is_empty() || line.as_bytes()[0] == "#".as_bytes()[0] {
+            continue;
+        }
 
         // removes comments from the line
         let line = line.split("#").next().unwrap();
@@ -64,17 +60,17 @@ pub async fn parse_object(
                     words.next().ok_or(err!())?.parse()?,
                     words.next().ok_or(err!())?.parse()?,
                 ]);
-            },
+            }
             Some("f") => {
-                let f: Vec<[u32; 3]> = words.map(|x| //maps each word to a [u32; 3]
+                let f: Vec<[u32; 3]> = words
+                    .map(|x| //maps each word to a [u32; 3]
                     x
                         .split("/")
                         .map(|y| y.parse::<u32>().unwrap() - 1) //subtracts 1 from each index to make it 0-based instead of 1-based
                         .collect::<Vec<u32>>()
                         .try_into()
-                        .unwrap()
-                ).collect();
-
+                        .unwrap())
+                    .collect();
 
                 let handle_vertex = |x: [u32; 3]| {
                     let x = (x[0], x[1], x[2]);
@@ -93,47 +89,51 @@ pub async fn parse_object(
                     3 => f.into_iter().for_each(handle_vertex),
                     4 => {
                         //converts the quad into two triangles
-                        [f[0], f[1], f[2],
-                         f[0], f[2], f[3]].into_iter().for_each(handle_vertex);
-                    },
+                        [f[0], f[1], f[2], f[0], f[2], f[3]]
+                            .into_iter()
+                            .for_each(handle_vertex);
+                    }
                     _ => return Err(Box::new(err!())),
                 }
-            },
+            }
             Some("vt") => {
                 vertex_uvs.push([
                     words.next().ok_or(err!())?.parse()?,
                     words.next().ok_or(err!())?.parse()?,
                 ]);
-            },
+            }
             Some("vn") => {
                 vertex_normals.push([
                     words.next().ok_or(err!())?.parse()?,
                     words.next().ok_or(err!())?.parse()?,
                     words.next().ok_or(err!())?.parse()?,
                 ]);
-            },
+            }
             _ => (),
         }
     }
 
-    let vertices = vertices.iter().map(|x| {
-        let position = vertex_positions[x.0 as usize];
-        let normal = vertex_normals[x.2 as usize];
-        let uv = vertex_uvs[x.1 as usize];
+    let vertices = vertices
+        .iter()
+        .map(|x| {
+            let position = vertex_positions[x.0 as usize];
+            let normal = vertex_normals[x.2 as usize];
+            let uv = vertex_uvs[x.1 as usize];
 
-        Vertex {
-            position,
-            normal,
-            uv,
-        }
-    }).collect::<Vec<Vertex>>();
+            Vertex {
+                position,
+                normal,
+                uv,
+            }
+        })
+        .collect::<Vec<Vertex>>();
 
     Ok(Model {
         vertices: VertexBuffer::new(display, &vertices)?,
         indices: IndexBuffer::new(
             display,
             glium::index::PrimitiveType::TrianglesList,
-            &indices
+            &indices,
         )?,
     })
 }

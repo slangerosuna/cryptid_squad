@@ -1,7 +1,7 @@
 use std::any::Any;
+use std::cell::SyncUnsafeCell;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::cell::SyncUnsafeCell;
 
 use crate::core::*;
 
@@ -40,7 +40,12 @@ impl Entity {
         }
     }
 
-    pub fn add_component<'a, T: Component + 'a>(&mut self, game_state: &mut GameState, component: T, component_type: ComponentType) {
+    pub fn add_component<'a, T: Component + 'a>(
+        &mut self,
+        game_state: &mut GameState,
+        component: T,
+        component_type: ComponentType,
+    ) {
         let rc = Arc::new(SyncUnsafeCell::new(ComponentStruct {
             component: Box::new(component),
             owner: self.id,
@@ -51,19 +56,32 @@ impl Entity {
         game_state.components[component_type].push(rc);
     }
 
-    pub fn get_component<'a, T: Component + 'a>(&'a self, component_type: ComponentType) -> Option<&'a T> {
+    pub fn get_component<'a, T: Component + 'a>(
+        &'a self,
+        component_type: ComponentType,
+    ) -> Option<&'a T> {
         for component in &self.components {
             if unsafe { &*component.get() }.component_type == component_type {
-                return unsafe { Some((&*(&*component.get()).component as &dyn Any).downcast_ref_unchecked()) };
+                return unsafe {
+                    Some((&*(&*component.get()).component as &dyn Any).downcast_ref_unchecked())
+                };
             }
         }
         None
     }
 
-    pub fn get_component_mut<'a, T: Component + 'a>(&'a mut self, component_type: ComponentType) -> Option<&'a mut T> {
+    pub fn get_component_mut<'a, T: Component + 'a>(
+        &'a mut self,
+        component_type: ComponentType,
+    ) -> Option<&'a mut T> {
         for component in &self.components {
             if unsafe { &*component.get() }.component_type == component_type {
-                return unsafe { Some((&mut *(&mut *component.get()).component as &mut dyn Any).downcast_mut_unchecked()) };
+                return unsafe {
+                    Some(
+                        (&mut *(&mut *component.get()).component as &mut dyn Any)
+                            .downcast_mut_unchecked(),
+                    )
+                };
             }
         }
         None
@@ -108,7 +126,11 @@ pub enum SystemType {
 
 pub struct System {
     pub args: Vec<ComponentType>,
-    pub system: Box<dyn Fn(*mut GameState, f64, f64) -> Pin<Box<dyn futures::Future<Output = ()>>> + Send + Sync>,
+    pub system: Box<
+        dyn Fn(*mut GameState, f64, f64) -> Pin<Box<dyn futures::Future<Output = ()>>>
+            + Send
+            + Sync,
+    >,
 }
 
 macro_rules! create_system {

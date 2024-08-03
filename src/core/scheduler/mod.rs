@@ -1,10 +1,9 @@
 use crate::core::*;
-use std::cell::SyncUnsafeCell;
-use tokio::time::Duration;
 use futures::future::poll_fn;
-use tokio::time::Instant;
+use std::cell::SyncUnsafeCell;
 use tokio::sync::Mutex;
-use std::sync::atomic::AtomicBool;
+use tokio::time::Duration;
+use tokio::time::Instant;
 
 pub struct Scheduler {
     init_systems: Vec<System>,
@@ -31,7 +30,9 @@ impl SchedulerLock {
         loop {
             let guard = self.0.lock().await;
 
-            if !*guard { break; }
+            if !*guard {
+                break;
+            }
 
             tokio::time::sleep(Duration::from_micros(100)).await;
         }
@@ -45,7 +46,6 @@ impl SchedulerLock {
     }
 }
 
-
 impl Scheduler {
     pub async fn loop_fixed_update(&self, game_state: *mut GameState) {
         let mut time = Instant::now();
@@ -55,10 +55,14 @@ impl Scheduler {
 
             let dur = Instant::now().duration_since(time);
 
-            if dur < self.fixed_update_interval
-              { tokio::time::sleep(dur).await; }
-            else
-              { eprintln!("Fixed update overran by {:?}", dur - self.fixed_update_interval); }
+            if dur < self.fixed_update_interval {
+                tokio::time::sleep(dur).await;
+            } else {
+                eprintln!(
+                    "Fixed update overran by {:?}",
+                    dur - self.fixed_update_interval
+                );
+            }
 
             time = Instant::now();
         }
@@ -86,27 +90,35 @@ impl Scheduler {
 
     pub fn add_system(&mut self, system: System, system_type: SystemType) {
         match system_type {
-            SystemType::Init => { 
+            SystemType::Init => {
                 self.init_systems.push(system);
-                self.init_execution_order = self.generate_execution_order_for_systems(&self.init_systems);
-            },
+                self.init_execution_order =
+                    self.generate_execution_order_for_systems(&self.init_systems);
+            }
             SystemType::Update => {
                 self.update_systems.push(system);
-                self.update_execution_order = self.generate_execution_order_for_systems(&self.update_systems);
-            },
+                self.update_execution_order =
+                    self.generate_execution_order_for_systems(&self.update_systems);
+            }
             SystemType::FixedUpdate => {
                 self.fixed_update_systems.push(system);
-                self.fixed_update_execution_order = self.generate_execution_order_for_systems(&self.fixed_update_systems);
-            },
+                self.fixed_update_execution_order =
+                    self.generate_execution_order_for_systems(&self.fixed_update_systems);
+            }
             SystemType::Close => {
                 self.close_systems.push(system);
-                self.close_execution_order = self.generate_execution_order_for_systems(&self.close_systems);
-            },
+                self.close_execution_order =
+                    self.generate_execution_order_for_systems(&self.close_systems);
+            }
         };
     }
 
     // you need to ensure that you call `generate_execution_order` for the system to be run
-    pub fn add_system_without_execution_order_generation(&mut self, system: System, system_type: SystemType) {
+    pub fn add_system_without_execution_order_generation(
+        &mut self,
+        system: System,
+        system_type: SystemType,
+    ) {
         match system_type {
             SystemType::Init => self.init_systems.push(system),
             SystemType::Update => self.update_systems.push(system),
@@ -118,7 +130,9 @@ impl Scheduler {
     pub async fn init(&mut self, game_state: &mut GameState) {
         let time = self.get_time();
         let dt = 0.0;
-        unsafe { self.prev_time.get().write(time); }
+        unsafe {
+            self.prev_time.get().write(time);
+        }
 
         self.execution_lock.lock().await;
         for group in self.init_execution_order.iter() {
@@ -131,7 +145,9 @@ impl Scheduler {
         let time = self.get_time();
         // this is ok because update and init are never run at the same time
         let dt = time - unsafe { *self.prev_time.get() };
-        unsafe { self.prev_time.get().write(time); }
+        unsafe {
+            self.prev_time.get().write(time);
+        }
 
         // used to ensure that update and fixed_update don't run at the same time
         self.execution_lock.lock().await;
@@ -156,7 +172,9 @@ impl Scheduler {
     pub async fn close(&self, game_state: &mut GameState) {
         let time = self.get_time();
         let dt = time - unsafe { *self.prev_time.get() };
-        unsafe { self.prev_time.get().write(time); }
+        unsafe {
+            self.prev_time.get().write(time);
+        }
 
         self.execution_lock.lock().await;
         for group in self.close_execution_order.iter() {
@@ -173,7 +191,13 @@ impl Scheduler {
         self.execution_lock.lock().await;
     }
 
-    async fn await_group(group: &Vec<usize>, systems: &Vec<System>, game_state: *mut GameState, time: f64, dt: f64) {
+    async fn await_group(
+        group: &Vec<usize>,
+        systems: &Vec<System>,
+        game_state: *mut GameState,
+        time: f64,
+        dt: f64,
+    ) {
         let mut futures = Vec::with_capacity(group.len());
 
         // Run all systems in the group
@@ -190,13 +214,16 @@ impl Scheduler {
                 }
             }
             std::task::Poll::Ready(())
-        }).await;
+        })
+        .await;
     }
 
     pub fn generate_execution_order(&mut self) {
         self.init_execution_order = self.generate_execution_order_for_systems(&self.init_systems);
-        self.update_execution_order = self.generate_execution_order_for_systems(&self.update_systems);
-        self.fixed_update_execution_order = self.generate_execution_order_for_systems(&self.fixed_update_systems);
+        self.update_execution_order =
+            self.generate_execution_order_for_systems(&self.update_systems);
+        self.fixed_update_execution_order =
+            self.generate_execution_order_for_systems(&self.fixed_update_systems);
         self.close_execution_order = self.generate_execution_order_for_systems(&self.close_systems);
     }
 
@@ -216,7 +243,8 @@ impl Scheduler {
 
                             for component in &systems[j].args {
                                 if dissallowed_components.contains(component)
-                                || *component == GameState::get_component_type() {
+                                    || *component == GameState::get_component_type()
+                                {
                                     can_run = false;
                                     break;
                                 }
@@ -225,8 +253,9 @@ impl Scheduler {
                                 group.push(j);
                                 visited[j] = true;
                                 for component in &systems[j].args {
-                                    if !dissallowed_components.contains(component)
-                                      { dissallowed_components.push(*component); }
+                                    if !dissallowed_components.contains(component) {
+                                        dissallowed_components.push(*component);
+                                    }
                                 }
                             }
                         }

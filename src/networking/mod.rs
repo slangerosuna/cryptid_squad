@@ -38,10 +38,7 @@ impl NetworkingResource {
             friends.request_user_information(f.id(), true);
         }
 
-        Ok(Self {
-            client,
-            single,
-        })
+        Ok(Self { client, single })
     }
 }
 
@@ -55,8 +52,9 @@ async fn run_callbacks(game_state: &mut GameState, _t: f64, _dt: f64) {
         // the system is never run in parallel with itself, so `FRAMES_SINCE_CALLBACK_RUN` doesn't
         // need to be atomized
         FRAMES_SINCE_CALLBACK_RUN += 1;
-        if FRAMES_SINCE_CALLBACK_RUN < FRAMES_PER_CALLBACK_RUN
-          { return; }
+        if FRAMES_SINCE_CALLBACK_RUN < FRAMES_PER_CALLBACK_RUN {
+            return;
+        }
 
         FRAMES_SINCE_CALLBACK_RUN = 0;
     }
@@ -74,7 +72,7 @@ async fn init_networking(game_state: &mut GameState, _t: f64, _dt: f64) {
             scheduler.add_system(get_run_callbacks_system(), SystemType::Update);
 
             game_state.add_resource(networking);
-        },
+        }
         Err(e) => {
             eprintln!("Error initializing networking: {}", e);
             if game_state.conf.exit_on_networking_error {

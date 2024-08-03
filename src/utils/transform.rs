@@ -1,5 +1,5 @@
-use crate::utils::math::matrix::Matrix4;
 use crate::core::*;
+use crate::utils::math::matrix::Matrix4;
 use std::any::Any;
 
 // component type 2
@@ -12,11 +12,7 @@ pub struct Transform {
 impl_component!(Transform, 2);
 
 impl Transform {
-    pub const fn new(
-        position: [f32; 3],
-        rotation: [f32; 3],
-        scale: [f32; 3],
-    ) -> Self {
+    pub const fn new(position: [f32; 3], rotation: [f32; 3], scale: [f32; 3]) -> Self {
         Self {
             position,
             rotation,
